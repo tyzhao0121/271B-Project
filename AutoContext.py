@@ -109,7 +109,11 @@ class AutoContext:
             yield [image_batch, label_batch]
 
     def generate_batch(self, images, labels):
+        #print(type(images), type(labels))
         for samples in self.generate_samples(len(images)):
+            #print(len(images))
+            #print(samples)
+            #print(type(samples))
             image_batch = images[samples]
             label_batch = labels[samples]
             for i in range(image_batch.shape[0]):
@@ -157,7 +161,7 @@ class AutoContext:
                 
                 lbllist.append(np.array(lbl2))
 
-        return imglist, lbllist
+        return np.array(imglist), np.array(lbllist)
 
 
     def train(self):
