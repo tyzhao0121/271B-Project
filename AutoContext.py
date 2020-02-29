@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow import nn
 from tensorflow.contrib.layers import conv2d, conv2d_transpose, max_pool2d, batch_norm
 
 import os
@@ -8,7 +9,7 @@ from PIL import Image
 class AutoContext:
 
     def __init__(self, BATCH_SIZE, MAX_EPOCH):
-        self.display_step = 2
+        self.display_step = 20
 
         self.width = 256
         self.height = 256
@@ -18,7 +19,8 @@ class AutoContext:
 
         self.batch_size = BATCH_SIZE
         self.learning_rate = 0.001
-        self.loss_method = 'weighted_cross_entropy'
+        #'weighted_cross_entropy'
+        self.loss_method = 'cross_entropy'
         self.modelPath = '/home/tiz007/271B-Project/ckpts'
         self.data_root = '/home/tiz007/lgg-mri-segmentation/kaggle_3m'
 
@@ -70,8 +72,8 @@ class AutoContext:
         
         return pred
 
-    def generate_class_weight(self):
-        """
+    def generate_class_weight(self, labels):
+        
         arg_labels = np.argmax(labels, axis = -1)
         class_weights = np.zeros(self.n_classes)
         for i in range(self.n_classes):
@@ -80,7 +82,7 @@ class AutoContext:
         """
         
         class_weights = np.ones(self.n_classes)
-
+        """
         return class_weights
 
     def generate_dataset(self, datapath):
@@ -154,14 +156,17 @@ class AutoContext:
                 img = Image.open(os.path.join(datapath, folder, imgindex)+'.tif')
                 imglist.append(np.array(img))
                 lbl = Image.open(os.path.join(datapath, folder, imgindex)+'_mask.tif')
-                lblarray = np.array(lbl)
+                lblarray = np.array(lbl)/255
+                
                 lbl2 = np.zeros([256, 256, 2])
+                
+                
                 lbl2[:, :, 0] = lblarray
                 lbl2[:, :, 1] = 1-lblarray
-                
+
                 lbllist.append(np.array(lbl2))
 
-        return np.array(imglist), np.array(lbllist)
+        return np.array(imglist)/255, np.array(lbllist)
 
 
     def train(self):
@@ -200,8 +205,12 @@ class AutoContext:
         # Evaluate model
         correct_pred = tf.equal(tf.argmax(pred, -1), tf.argmax(y, -1))
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-
-        class_weights = self.generate_class_weight()
+        
+        pred_prob = nn.softmax(pred_reshape, 1)
+        
+        intersection = tf.reduce_sum(pred_prob[:, 0] * y_reshape[:, 0])
+        diceco = (2 * intersection + 1)/(tf.reduce_sum(pred_prob[:, 0]) + tf.reduce_sum(y_reshape[:, 0]) + 1)
+        class_weights = self.generate_class_weight(train_lbl_list)
 
         saver = tf.train.Saver()
         model_path = os.path.join(self.modelPath, 'Unet.ckpt')
@@ -209,23 +218,49 @@ class AutoContext:
         # Initializing the variables
         init = tf.global_variables_initializer()
         
+        ###########################
+        print(np.max(train_img_list), np.min(train_img_list))
+        print(train_img_list.shape)
+        ###########################
+        
+        
         with tf.Session() as sess:
             sess.run(init)
-            for epoch in range(self.max_epoch):
-                for batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(train_img_list, train_lbl_list)): 
-                    # flatten to n dimsion
-                    label_vect = np.reshape(np.argmax(label_batch, axis=-1), [self.batch_size * self.width * self.height])
-                    weight_vect = class_weights[label_vect]
+            for batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(train_img_list, train_lbl_list)): 
+                # flatten to n dimsion
+                label_vect = np.reshape(np.argmax(label_batch, axis=-1), [self.batch_size * self.width * self.height])
+                weight_vect = class_weights[label_vect]
 
-                    # Fit training using batch data
-                    feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
-                    loss, acc, _ = sess.run([cost, accuracy, optimizer], feed_dict=feed_dict)
+                # Fit training using batch data
+                feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
+                dice, loss, acc, _, yy = sess.run([diceco, cost, accuracy, optimizer, y_reshape], feed_dict=feed_dict)
 
-                    if batch_idx % self.display_step == 0:
-                        print("Epoch: %d, batch_idx: %d, Minibatch Loss: %0.6f , Training Accuracy: %0.5f " 
-                            % (epoch, batch_idx, loss, acc))
+                
+                if batch_idx % self.display_step == 0:
+                    print("Batch_idx: %d, Minibatch Loss: %0.6f , Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
+                        % (batch_idx, loss, acc, dice))
 
-                        # Save the variables to disk.
-                        # saver.save(sess, model_path)
-                    if epoch % 2 == 0:
-                        self.learning_rate *= 0.9
+                    # Save the variables to disk.
+                    # saver.save(sess, model_path)
+                
+                if batch_idx % 500 == 499:
+                    #self.learning_rate *= 0.9
+                    
+                    num_val = 0
+                    acc_sum = 0
+                    dce_sum = 0
+                    for val_batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(test_img_list, test_lbl_list)): 
+                   
+                        feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
+                        dice, loss, acc = sess.run([diceco, cost, accuracy], feed_dict=feed_dict)
+                        
+                        num_val += image_batch.shape[0]
+                        acc_sum += acc*image_batch.shape[0]
+                        dce_sum += dice*image_batch.shape[0]
+                        
+                    val_acc = acc_sum/num_val
+                    val_dce = dce_sum / num_val
+                    print("validation acc: {}".format(val_acc))
+                    print("validation dice: {}".format(val_dce))
+                
+                        
