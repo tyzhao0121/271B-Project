@@ -222,7 +222,9 @@ for step2, (image_batch, label_batch) in enumerate(generate_batch()):
     if step2 % 2000 == 0:
         learning_rate *= 0.9
 
+
 ##############################Test#########################
+"""
 for f in os.listdir(dataPath+'Images/'):
     if "img" in f:
         print(f)
@@ -234,11 +236,19 @@ for f in os.listdir(dataPath+'Images/'):
         Pmask = np.zeros_like(temp)
         ProbRes = np.zeros_like(temp)
         for z in range(0, 124):
+            # 2 image a pair
             if z % 2 == 0:
+                
+                # finish 1 iteration?
                 if z == 124-1:
+                    # initial batch
                     image_batch2 = np.zeros((2,width,height,1), dtype=np.float32)
+                    # train_data: temp[0,:,:]
                     image_batch2[0,:,:,0] = temp[z-1,:,:]
+                    # label: temp[1,:,:]
                     image_batch2[1,:,:,0] = temp[z,:,:]
+
+
                     out = sess.run(tf.nn.softmax(pred_reshape), feed_dict={x: image_batch2})
                     _out = np.reshape(out, (2, width, height, 2)) 
                     resArr = np.asarray(_out)
@@ -270,3 +280,5 @@ for f in os.listdir(dataPath+'Images/'):
         print(2*tp/(2*tp+fp+fn))
         print(tp/(tp+fn))
         print(tn/(tn+fp))
+
+"""

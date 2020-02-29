@@ -104,6 +104,31 @@ class AutoContext:
         for _ in range(100):
             yield [image_batch, label_batch]
 
+    def generate_batch(self):
+        for samples in generate_samples():
+            image_batch = images[samples]
+            label_batch = labels[samples]
+            for i in range(image_batch.shape[0]):
+                image_batch[i], label_batch[i] = augment_sample(image_batch[i], label_batch[i])
+            yield(image_batch, label_batch)
+
+    def generate_samples(self):
+        n_samples = NumberOfSamples * NumberOfSlices
+        n_epochs = 1000
+        n_batches = n_samples/batch_size
+        for _ in range(n_epochs):
+            sample_ids = np.random.permutation(n_samples)
+            for i in range(int(n_batches)):
+                inds = slice(i*batch_size, (i+1)*batch_size)
+                yield sample_ids[inds]
+
+    def augment_sample(self, image, label):
+
+        image = image
+        label = label
+        
+        return(image, label)
+
     def train(self):
 
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels])
