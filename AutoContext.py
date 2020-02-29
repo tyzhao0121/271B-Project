@@ -20,14 +20,15 @@ class AutoContext:
         self.batch_size = BATCH_SIZE
         self.learning_rate = 0.001
         #'weighted_cross_entropy'
-        self.loss_method = 'cross_entropy'
+        self.loss_method = 'weighted_cross_entropy'
         self.modelPath = '/home/tiz007/271B-Project/ckpts'
         self.data_root = '/home/tiz007/lgg-mri-segmentation/kaggle_3m'
 
         self.train_file = '/home/tiz007/train.txt'
         self.test_file = '/home/tiz007/test.txt'
         self.val_file = '/home/tiz007/val.txt'
-
+        print("Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size,
+                                                                                  self.learning_rate, self.loss_method))
     def Unet(self, x):
         conv1 = conv2d(x, 32, 3, normalizer_fn=batch_norm)
         conv1 = conv2d(conv1, 32, 3, normalizer_fn=batch_norm)
@@ -80,7 +81,6 @@ class AutoContext:
             class_weights[i] = 1 / np.mean(arg_labels == i) ** 0.3
         class_weights /= np.sum(class_weights)
         """
-        
         class_weights = np.ones(self.n_classes)
         """
         return class_weights
@@ -110,22 +110,21 @@ class AutoContext:
         for _ in range(100):
             yield [image_batch, label_batch]
 
-    def generate_batch(self, images, labels):
-        #print(type(images), type(labels))
-        for samples in self.generate_samples(len(images)):
-            #print(len(images))
-            #print(samples)
-            #print(type(samples))
+    def generate_batch(self, images, labels, epochs):
+        for samples in self.generate_samples(len(images), epochs):
+
             image_batch = images[samples]
             label_batch = labels[samples]
+            """
             for i in range(image_batch.shape[0]):
                 image_batch[i], label_batch[i] = self.augment_sample(image_batch[i], label_batch[i])
+            """
             yield(image_batch, label_batch)
 
-    def generate_samples(self, n_samples):
+    def generate_samples(self, n_samples, epochs):
 
         n_batches = n_samples/self.batch_size
-        for _ in range(self.max_epoch):
+        for _ in range(epochs):
             sample_ids = np.random.permutation(n_samples)
             for i in range(int(n_batches)):
                 inds = slice(i*self.batch_size, (i+1)*self.batch_size)
@@ -210,8 +209,10 @@ class AutoContext:
         y_lbl = tf.reshape(tf.argmin(y, -1), [-1, self.width * self.height])
         
         intersection = tf.reduce_sum(pred_lbl*y_lbl)
-
-        diceco = (2 * intersection + 1)/(tf.reduce_sum(pred_lbl) + tf.reduce_sum(y_lbl) + 1)
+        sum_pred_lbl = tf.reduce_sum(pred_lbl)
+        sum_y_lbl = tf.reduce_sum(y_lbl)
+        diceco = (2 * intersection + 1)/(sum_pred_lbl + sum_y_lbl + 1)
+        
         class_weights = self.generate_class_weight(train_lbl_list)
 
         saver = tf.train.Saver()
@@ -228,20 +229,20 @@ class AutoContext:
         
         with tf.Session() as sess:
             sess.run(init)
-            for batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(train_img_list, train_lbl_list)): 
+            for batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(train_img_list, train_lbl_list, self.max_epoch)): 
                 # flatten to n dimsion
                 label_vect = np.reshape(np.argmax(label_batch, axis=-1), [self.batch_size * self.width * self.height])
                 weight_vect = class_weights[label_vect]
 
                 # Fit training using batch data
                 feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
-                dice, loss, acc, _, yy = sess.run([diceco, cost, accuracy, optimizer, y_reshape], feed_dict=feed_dict)
+                dice, loss, acc, _, inter, sum_pred, sum_y = sess.run([diceco, cost, accuracy, optimizer, intersection, sum_pred_lbl, sum_y_lbl], feed_dict=feed_dict)
 
                 
                 if batch_idx % self.display_step == 0:
                     print("Batch_idx: %d, Minibatch Loss: %0.6f , Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
                         % (batch_idx, loss, acc, dice))
-
+                    print("intersection: {}, sum_pred: {}, sum_y: {}".format(inter, sum_pred, sum_y))
                     # Save the variables to disk.
                     # saver.save(sess, model_path)
                 
@@ -251,7 +252,7 @@ class AutoContext:
                     num_val = 0
                     acc_sum = 0
                     dce_sum = 0
-                    for val_batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(test_img_list, test_lbl_list)): 
+                    for val_batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(test_img_list, test_lbl_list, 1)): 
                    
                         feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
                         dice, loss, acc = sess.run([diceco, cost, accuracy], feed_dict=feed_dict)
