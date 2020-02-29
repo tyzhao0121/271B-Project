@@ -206,10 +206,12 @@ class AutoContext:
         correct_pred = tf.equal(tf.argmax(pred, -1), tf.argmax(y, -1))
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
         
-        pred_prob = nn.softmax(pred_reshape, 1)
+        pred_lbl = tf.reshape(tf.argmin(pred, -1), [-1, self.width * self.height])
+        y_lbl = tf.reshape(tf.argmin(y, -1), [-1, self.width * self.height])
         
-        intersection = tf.reduce_sum(pred_prob[:, 0] * y_reshape[:, 0])
-        diceco = (2 * intersection + 1)/(tf.reduce_sum(pred_prob[:, 0]) + tf.reduce_sum(y_reshape[:, 0]) + 1)
+        intersection = tf.reduce_sum(pred_lbl*y_lbl)
+
+        diceco = (2 * intersection + 1)/(tf.reduce_sum(pred_lbl) + tf.reduce_sum(y_lbl) + 1)
         class_weights = self.generate_class_weight(train_lbl_list)
 
         saver = tf.train.Saver()
