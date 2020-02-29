@@ -22,6 +22,10 @@ class AutoContext:
         self.modelPath = '/home/tiz007/271B-Project/ckpts'
         self.data_root = '/home/tiz007/lgg-mri-segmentation/kaggle_3m'
 
+        self.train_file = '/home/tiz007/train.txt'
+        self.test_file = '/home/tiz007/test.txt'
+        self.val_file = '/home/tiz007/val.txt'
+
     def Unet(self, x):
         conv1 = conv2d(x, 32, 3, normalizer_fn=batch_norm)
         conv1 = conv2d(conv1, 32, 3, normalizer_fn=batch_norm)
@@ -104,23 +108,23 @@ class AutoContext:
         for _ in range(100):
             yield [image_batch, label_batch]
 
-    def generate_batch(self):
-        for samples in generate_samples():
+    def generate_batch(self, images, labels):
+        for samples in self.generate_samples(len(images)):
             image_batch = images[samples]
             label_batch = labels[samples]
             for i in range(image_batch.shape[0]):
-                image_batch[i], label_batch[i] = augment_sample(image_batch[i], label_batch[i])
+                image_batch[i], label_batch[i] = self.augment_sample(image_batch[i], label_batch[i])
             yield(image_batch, label_batch)
 
-    def generate_samples(self):
-        n_samples = NumberOfSamples * NumberOfSlices
-        n_epochs = 1000
-        n_batches = n_samples/batch_size
-        for _ in range(n_epochs):
+    def generate_samples(self, n_samples):
+
+        n_batches = n_samples/self.batch_size
+        for _ in range(self.max_epoch):
             sample_ids = np.random.permutation(n_samples)
             for i in range(int(n_batches)):
-                inds = slice(i*batch_size, (i+1)*batch_size)
+                inds = slice(i*self.batch_size, (i+1)*self.batch_size)
                 yield sample_ids[inds]
+
 
     def augment_sample(self, image, label):
 
@@ -129,8 +133,39 @@ class AutoContext:
         
         return(image, label)
 
-    def train(self):
+    def load_data_to_list(self, file, datapath):
+        imglist = []
+        lbllist = []
+        with open(file, 'r') as f:
+            folderlist = f.read().split()
+        # print(folderlist)
+        for folder in folderlist:
+            imgnamelist = os.listdir(os.path.join(datapath, folder))
+            # print(imgnamelist)
+            for imgname in imgnamelist:
+                if 'mask' in imgname:
+                    continue
+                imgindex = imgname.split('.')[0]
+                # print(imgindex, imgname)
+                img = Image.open(os.path.join(datapath, folder, imgindex)+'.tif')
+                imglist.append(np.array(img))
+                lbl = Image.open(os.path.join(datapath, folder, imgindex)+'_mask.tif')
+                lblarray = np.array(lbl)
+                lbl2 = np.zeros([256, 256, 2])
+                lbl2[:, :, 0] = lblarray
+                lbl2[:, :, 1] = 1-lblarray
+                
+                lbllist.append(np.array(lbl2))
 
+        return imglist, lbllist
+
+
+    def train(self):
+        
+        train_img_list, train_lbl_list = self.load_data_to_list(self.train_file, self.data_root)
+        test_img_list, test_lbl_list = self.load_data_to_list(self.test_file, self.data_root)
+        val_img_list, val_lbl_list = self.load_data_to_list(self.val_file, self.data_root)
+        
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
         lr = tf.placeholder(tf.float32)
@@ -173,7 +208,7 @@ class AutoContext:
         with tf.Session() as sess:
             sess.run(init)
             for epoch in range(self.max_epoch):
-                for batch_idx, (image_batch, label_batch) in enumerate(self.load_data()): 
+                for batch_idx, (image_batch, label_batch) in enumerate(self.generate_batch(train_img_list, train_lbl_list)): 
                     # flatten to n dimsion
                     label_vect = np.reshape(np.argmax(label_batch, axis=-1), [self.batch_size * self.width * self.height])
                     weight_vect = class_weights[label_vect]
