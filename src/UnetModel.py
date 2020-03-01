@@ -3,6 +3,8 @@ from tensorflow import nn
 from tensorflow.contrib.layers import conv2d, conv2d_transpose, max_pool2d, batch_norm
 
 import os
+import time
+
 import numpy as np
 from PIL import Image
 
@@ -13,28 +15,37 @@ from datafile import Dataset
 class UnetModel:
 
     def __init__(self, BATCH_SIZE, MAX_EPOCH):
+        # display setting
         self.display_step = 100
 
+        # image configuration
         self.width = 256
         self.height = 256
         self.n_channels = 3
         self.n_classes = 2
+        
+        # hyper parameters
         self.max_epoch = MAX_EPOCH
-
         self.batch_size = BATCH_SIZE
         self.learning_rate = 0.001
-        #'weighted_cross_entropy'
         self.loss_method = 'weighted_cross_entropy'
 
         self.model_name = 'Unet'
         
-        self.modelPath = '../model'
-        
         self.logPath = '../log'
         
+        self.log_file, index = self.initial_log()
+        
+        self.modelPath = '../model'
+        
+        self.modelDir = os.path.join(self.modelPath, self.model_name + '_model_' + str(index))
+        
+        if not os.path.exists(self.modelDir):
+            os.mkdir(self.modelDir)
+        
+        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        
         self.data = Dataset('../data/kaggle_3m', BATCH_SIZE, MAX_EPOCH)
-       
-        self.log_file = self.initial_log()
     
         print("Data loading finished!\n")
         
@@ -42,14 +53,14 @@ class UnetModel:
                                                                                   self.learning_rate, self.loss_method))
 
     def initial_log(self):
+        
         i = 0
-        while self.model_name + '_log_' + i + '.txt' in os.listdir(self.logPath):
+        while self.model_name + '_log_' + str(i) + '.txt' in os.listdir(self.logPath):
             i += 1
+        file_name = self.model_name + '_log_' + str(i) + '.txt'
         
-        return self.model_name + '_log_' + i + '.txt'
-            
-        
-         
+        return os.path.join(self.logPath, file_name), i
+                     
     def network(self, x):
         
         pred = Unet(x)
@@ -57,10 +68,10 @@ class UnetModel:
         return pred
 
     def log(self, str):
+        
         with open(self.log_file, 'a') as f:
             f.write(str + '\n')
         print(str)
-            
     
     def train(self):
         
@@ -179,6 +190,13 @@ class UnetModel:
                     self.log("validation dice: {}".format(val_dce))
                     
                     # Save the variables to disk.
-                    # saver.save(sess, model_path)
+                    if val_dce > 0.7:
+                        checkpoint_name = "{}_step_{}_dice_{:.4f}".format(self.model_name, batch_idx+1, val_dce)
+                        checkpoint_path = os.path.join(self.modelDir, checkpoint_name)
+                        saver.save(sess, checkpoint_path)
+                        
+                        self.log("saving checkpoint to {}".format(checkpoint_path))
+
+                        
                 
                         
