@@ -80,6 +80,7 @@ class AutoUnet:
             f.write(str + '\n')
         print(str)
     def train_stage1(self):
+        self.learning_rate = 0.001
         print(self.initial_log())
         self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
@@ -225,10 +226,11 @@ class AutoUnet:
                         
                         max_val_dce = val_dce
                         
-                    if val_dce > 0.65:
+                    if val_dce > 0.75:
                         return
 
     def train_stage2(self):
+        self.learning_rate = 0.001
         print(self.initial_log())
         self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
@@ -375,11 +377,12 @@ class AutoUnet:
                         
                         max_val_dce = val_dce
                         
-                    if val_dce > 0.65:
+                    if val_dce > 0.75:
                         return
 
                     
     def train_stage3(self):
+        self.learning_rate = 0.001
         print(self.initial_log())
         self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
@@ -527,7 +530,7 @@ class AutoUnet:
                         
                         max_val_dce = val_dce
                         
-                    if val_dce > 0.65:
+                    if val_dce > 0.75:
                         return
                     
     def train_end_to_end(self, file1, file2, file3):
