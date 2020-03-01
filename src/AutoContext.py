@@ -30,19 +30,20 @@ class AutoUnet:
         self.learning_rate = 0.001
         self.loss_method = 'weighted_cross_entropy'
 
+        self.modelPath = '../model'
         self.model_name = 'AutoUnet'
         self.logPath = '../log'
-        self.log_file, index = self.initial_log()
-        self.modelPath = '../model'
-        self.modelDir = os.path.join(self.modelPath, self.model_name + '_model_' + str(index))
+        self.modelDir = None
+        self.log_file = None
+        self.initial_log()
+
         
         if not os.path.exists(self.modelDir):
             os.mkdir(self.modelDir)
-        
-        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
         self.data = Dataset('../data/kaggle_3m', BATCH_SIZE, MAX_EPOCH)
         print("Data loading finished!\n")
-        self.log("Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
+        
 
         self.train_stage1_mask = np.ones((self.batch_size, self.width, self.height, 2)) / 2
         self.train_stage2_mask = np.zeros((self.batch_size, self.width, self.height, 2))
@@ -62,7 +63,10 @@ class AutoUnet:
             i += 1
         file_name = self.model_name + '_log_' + str(i) + '.txt'
         
-        return os.path.join(self.logPath, file_name), i
+        
+        self.modelDir = os.path.join(self.modelPath, self.model_name + '_model_' + str(i))
+        self.log_file = os.path.join(self.logPath, file_name)
+        return os.path.join(self.logPath, file_name)
                      
     def network(self, x):
         
@@ -76,6 +80,10 @@ class AutoUnet:
             f.write(str + '\n')
         print(str)
     def train_stage1(self):
+        print(self.initial_log())
+        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
+        
         tf.reset_default_graph()
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels+2])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
@@ -170,7 +178,7 @@ class AutoUnet:
                     train_dce = dce_sum_train / num_train
                     train_loss = loss_sum_train / num_train
 
-                    self.log("Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
+                    self.log("【Stage1】 Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
                         % (batch_idx, train_loss, train_acc, train_dce))
 
                     num_train = 0
@@ -200,8 +208,8 @@ class AutoUnet:
 
                     val_acc = acc_sum_val / num_val
                     val_dce = dce_sum_val / num_val
-                    self.log("validation acc: {}".format(val_acc))
-                    self.log("validation dice: {}".format(val_dce))
+                    self.log("【Stage1】validation acc: {}".format(val_acc))
+                    self.log("【Stage1】validation dice: {}".format(val_dce))
 
                     # Save the variables to disk.
                     if val_dce > max_val_dce:
@@ -213,11 +221,17 @@ class AutoUnet:
                         checkpoint_path = os.path.join(self.modelDir, checkpoint_name)
                         saver.save(sess, checkpoint_path, write_meta_graph=False)
 
-                        self.log("saving checkpoint to {}".format(checkpoint_path))
+                        self.log("【Stage1】saving checkpoint to {}".format(checkpoint_path))
+                        
+                        max_val_dce = val_dce
+                        
                     if val_dce > 0.65:
                         return
 
     def train_stage2(self):
+        print(self.initial_log())
+        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
         tf.reset_default_graph()
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels+2])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
@@ -312,7 +326,7 @@ class AutoUnet:
                     train_dce = dce_sum_train / num_train
                     train_loss = loss_sum_train / num_train
 
-                    self.log("Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
+                    self.log("【Stage2】Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
                         % (batch_idx, train_loss, train_acc, train_dce))
 
                     num_train = 0
@@ -344,8 +358,8 @@ class AutoUnet:
 
                     val_acc = acc_sum_val / num_val
                     val_dce = dce_sum_val / num_val
-                    self.log("validation acc: {}".format(val_acc))
-                    self.log("validation dice: {}".format(val_dce))
+                    self.log("【Stage2】validation acc: {}".format(val_acc))
+                    self.log("【Stage2】validation dice: {}".format(val_dce))
 
                     # Save the variables to disk.
                     if val_dce > max_val_dce:
@@ -357,12 +371,18 @@ class AutoUnet:
                         checkpoint_path = os.path.join(self.modelDir, checkpoint_name)
                         saver.save(sess, checkpoint_path, write_meta_graph=False)
 
-                        self.log("saving checkpoint to {}".format(checkpoint_path))
+                        self.log("【Stage2】saving checkpoint to {}".format(checkpoint_path))
+                        
+                        max_val_dce = val_dce
+                        
                     if val_dce > 0.65:
                         return
 
                     
     def train_stage3(self):
+        print(self.initial_log())
+        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
         tf.reset_default_graph()
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels+2])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
@@ -433,12 +453,14 @@ class AutoUnet:
             max_val_dce = 0.5
             for batch_idx, (image_batch, label_batch) in enumerate(self.data.train_batch()): 
                 # flatten to n dimsion
+                concated_image = np.concatenate((image_batch, self.train_stage3_mask), axis=3)
                 
+               
                 label_vect = np.reshape(np.argmax(label_batch, axis=-1), [self.batch_size * self.width * self.height])
                 weight_vect = class_weights[label_vect]
 
                 # Fit training using batch data
-                feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
+                feed_dict = {x: concated_image, y: label_batch, weights: weight_vect, lr:self.learning_rate}
 
                 # run session
                 train_pred_mask, dice, loss, acc, _, inter, sum_pred, sum_y = sess.run([pred, diceco, cost, accuracy, optimizer, intersection, sum_pred_lbl, sum_y_lbl], feed_dict=feed_dict)
@@ -455,7 +477,7 @@ class AutoUnet:
                     train_dce = dce_sum_train / num_train
                     train_loss = loss_sum_train / num_train
 
-                    self.log("Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
+                    self.log("【Stage3】Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
                         % (batch_idx, train_loss, train_acc, train_dce))
 
                     num_train = 0
@@ -474,9 +496,12 @@ class AutoUnet:
                     dce_sum_val = 0
                     for val_batch_idx, (image_batch, label_batch) in enumerate(self.data.val_batch()): 
                     
+                        concated_image = np.concatenate((image_batch, self.val_stage3_mask), axis=3)                      
                         
-                        feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
+                        feed_dict = {x: concated_image, y: label_batch, weights: weight_vect, lr:self.learning_rate}
                         val_pred_mask, dice, loss, acc = sess.run([pred, diceco, cost, accuracy], feed_dict=feed_dict)
+                        
+
 
                         n_sample = image_batch.shape[0]
                         num_val += n_sample
@@ -485,8 +510,8 @@ class AutoUnet:
 
                     val_acc = acc_sum_val / num_val
                     val_dce = dce_sum_val / num_val
-                    self.log("validation acc: {}".format(val_acc))
-                    self.log("validation dice: {}".format(val_dce))
+                    self.log("【Stage3】validation acc: {}".format(val_acc))
+                    self.log("【Stage3】validation dice: {}".format(val_dce))
 
                     # Save the variables to disk.
                     if val_dce > max_val_dce:
@@ -498,11 +523,17 @@ class AutoUnet:
                         checkpoint_path = os.path.join(self.modelDir, checkpoint_name)
                         saver.save(sess, checkpoint_path, write_meta_graph=False)
 
-                        self.log("saving checkpoint to {}".format(checkpoint_path))
+                        self.log("【Stage3】saving checkpoint to {}".format(checkpoint_path))
+                        
+                        max_val_dce = val_dce
+                        
                     if val_dce > 0.65:
                         return
                     
-    def train_end_to_end(self):
+    def train_end_to_end(self, file1, file2, file3):
+        print(self.initial_log())
+        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        self.log("Stage ALL, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
         tf.reset_default_graph()
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
@@ -590,11 +621,11 @@ class AutoUnet:
         
         
         with tf.Session() as sess:
-            self.learning_rate = 1e-4
+            self.learning_rate = 1e-5
             sess.run(init)
-            saver1.restore(sess, '../model/AutoUnet_model_2/AutoUnetstage1_step_500_dice_0.0211')
-            saver2.restore(sess, '../model/AutoUnet_model_2/AutoUnetstage2_step_500_dice_0.3815')
-            saver3.restore(sess, '../model/AutoUnet_model_2/AutoUnetstage3_step_500_dice_0.2235')
+            saver1.restore(sess, file1)
+            saver2.restore(sess, file2)
+            saver3.restore(sess, file3)
             
             max_val_dce = 0.5
             for batch_idx, (image_batch, label_batch) in enumerate(self.data.train_batch()): 
@@ -622,7 +653,7 @@ class AutoUnet:
                     train_dce = dce_sum_train / num_train
                     train_loss = loss_sum_train / num_train
 
-                    self.log("Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
+                    self.log("【Stage all】Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
                         % (batch_idx, train_loss, train_acc, train_dce))
 
                     num_train = 0
@@ -651,8 +682,8 @@ class AutoUnet:
 
                     val_acc = acc_sum_val / num_val
                     val_dce = dce_sum_val / num_val
-                    self.log("validation acc: {}".format(val_acc))
-                    self.log("validation dice: {}".format(val_dce))
+                    self.log("【Stage all】validation acc: {}".format(val_acc))
+                    self.log("【Stage all】validation dice: {}".format(val_dce))
 
                     # Save the variables to disk.
                     if val_dce > max_val_dce:
@@ -662,7 +693,9 @@ class AutoUnet:
                         checkpoint_path = os.path.join(self.modelDir, checkpoint_name)
                         saver.save(sess, checkpoint_path)
 
-                        self.log("saving checkpoint to {}".format(checkpoint_path))
+                        self.log("【Stage all】saving checkpoint to {}".format(checkpoint_path))
+                        max_val_dce = val_dce
+                        
                     if val_dce > 0.85:
                         return
                
