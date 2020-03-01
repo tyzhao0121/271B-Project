@@ -13,7 +13,7 @@ from datafile import Dataset
 class UnetModel:
 
     def __init__(self, BATCH_SIZE, MAX_EPOCH):
-        self.display_step = 20
+        self.display_step = 100
 
         self.width = 256
         self.height = 256
@@ -26,9 +26,9 @@ class UnetModel:
         #'weighted_cross_entropy'
         self.loss_method = 'weighted_cross_entropy'
 
-        self.modelPath = '/home/yug015/271B-Project/ckpts'
+        self.modelPath = '../model'
         
-        self.data = Dataset('/home/yug015/lgg-mri-segmentation/kaggle_3m', BATCH_SIZE, MAX_EPOCH)
+        self.data = Dataset('../data/kaggle_3m', BATCH_SIZE, MAX_EPOCH)
        
         print("Data loading finished!\n")
         
