@@ -33,34 +33,37 @@ class UnetModel:
         self.model_name = 'Unet'
         
         self.logPath = '../log'
-        
-        self.log_file, index = self.initial_log()
-        
+                
         self.modelPath = '../model'
+
+        self.log_file = ''
         
-        self.modelDir = os.path.join(self.modelPath, self.model_name + '_model_' + str(index))
-        
-        if not os.path.exists(self.modelDir):
-            os.mkdir(self.modelDir)
-        
-        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-        
+        self.modelDir = ''
+                
         self.data = Dataset('../data/kaggle_3m', BATCH_SIZE, MAX_EPOCH)
     
         print("Data loading finished!\n")
         
+    def initial_log_and_modeldir(self):
+        
+        index = 0
+        
+        while self.model_name + '_log_' + str(index) + '.txt' in os.listdir(self.logPath):
+            index += 1
+        file_name = self.model_name + '_log_' + str(index) + '.txt'
+
+        self.modelDir = os.path.join(self.modelPath, self.model_name + '_model_' + str(index))
+
+        if not os.path.exists(self.modelDir):
+            os.mkdir(self.modelDir)
+
+        self.log_file = os.path.join(self.logPath, file_name)
+            
+        self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
         self.log("Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size,
                                                                                   self.learning_rate, self.loss_method))
-
-    def initial_log(self):
-        
-        i = 0
-        while self.model_name + '_log_' + str(i) + '.txt' in os.listdir(self.logPath):
-            i += 1
-        file_name = self.model_name + '_log_' + str(i) + '.txt'
-        
-        return os.path.join(self.logPath, file_name), i
-                     
+                             
     def network(self, x):
         
         pred = Unet(x)
@@ -74,7 +77,8 @@ class UnetModel:
         print(str)
     
     def train(self):
-        
+        self.initial_log_and_modeldir()
+
        
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
@@ -169,7 +173,7 @@ class UnetModel:
 
                 
                 if batch_idx % 500 == 499:
-                    self.learning_rate *= 0.9
+                    
                     
                     num_val = 0
                     acc_sum_val = 0
@@ -196,7 +200,56 @@ class UnetModel:
                         saver.save(sess, checkpoint_path)
                         
                         self.log("saving checkpoint to {}".format(checkpoint_path))
+                        
+                if batch_idx % 5000 == 4999:
+                    self.learning_rate *= 0.9
 
+    def test(self, index, steps):
+        print("start testing")
+        model_dir = os.path.join(self.modelPath, "{}_model_{}".format(self.model_name, index)) #, "{}_model_step_{}".format(self.model_name, steps
+        suffix = "{}_step_{}_dice".format(self.model_name, steps)
+        
+        meta_path = ''
+        ckpt_path = ''
+        for ckpt_file in os.listdir(model_dir):
+            if ckpt_file[:len(suffix)] == suffix and ckpt_file[-4:] == 'meta':
+                meta_path = os.path.join(model_dir, ckpt_file)
+                ckpt_path = os.path.join(model_dir, ckpt_file[:-5])
+                
+        if meta_path == '' or ckpt_path == '':
+            raise Exception("checkpoint not found")
+        
+        with tf.Session() as sess:
+            saver = tf.train.import_meta_graph(meta_path)
+            saver.restore(sess, ckpt_path)
+            graph = tf.get_default_graph()
+            #for name in [n.name for n in tf.get_default_graph().as_graph_def().node]:
+                #print(name)
+            x = graph.get_tensor_by_name('Placeholder:0')
+            y = graph.get_tensor_by_name('Placeholder_1:0')
+            diceco = graph.get_tensor_by_name('truediv:0')
+            accuracy = graph.get_tensor_by_name('Mean:0')
+            for i in tf.get_collection(tf.GraphKeys.SUMMARIES):
+                print(i)   # i.name if you want just a name
+            num_val = 0
+            acc_sum_val = 0
+            dce_sum_val = 0
+            for val_batch_idx, (image_batch, label_batch) in enumerate(self.data.test_batch()): 
+
+                feed_dict = {x: image_batch, y: label_batch}
+                dice, acc = sess.run([diceco, accuracy], feed_dict=feed_dict)
+
+                n_sample = image_batch.shape[0]
+                num_val += n_sample
+                acc_sum_val += acc * n_sample
+                dce_sum_val += dice * n_sample
+
+            val_acc = acc_sum_val / num_val
+            val_dce = dce_sum_val / num_val
+            print("validation acc: {}".format(val_acc))
+            print("validation dice: {}".format(val_dce))
+        
+        
                         
                 
                         
