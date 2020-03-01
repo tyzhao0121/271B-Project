@@ -10,7 +10,7 @@ from PIL import Image
 from model import Unet
 from datafile import Dataset
 
-class AutoContext:
+class UnetModel:
 
     def __init__(self, BATCH_SIZE, MAX_EPOCH):
         self.display_step = 20
