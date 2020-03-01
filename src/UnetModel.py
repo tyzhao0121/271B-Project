@@ -26,22 +26,42 @@ class UnetModel:
         #'weighted_cross_entropy'
         self.loss_method = 'weighted_cross_entropy'
 
+        self.model_name = 'Unet'
+        
         self.modelPath = '../model'
+        
+        self.logPath = '../log'
         
         self.data = Dataset('../data/kaggle_3m', BATCH_SIZE, MAX_EPOCH)
        
+        self.log_file = self.initial_log()
+    
         print("Data loading finished!\n")
         
-        print("Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size,
+        self.log("Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size,
                                                                                   self.learning_rate, self.loss_method))
 
+    def initial_log(self):
+        i = 0
+        while self.model_name + '_log_' + i + '.txt' in os.listdir(self.logPath):
+            i += 1
+        
+        return self.model_name + '_log_' + i + '.txt'
+            
+        
+         
     def network(self, x):
         
         pred = Unet(x)
         
         return pred
 
-
+    def log(self, str):
+        with open(self.log_file, 'a') as f:
+            f.write(str + '\n')
+        print(str)
+            
+    
     def train(self):
         
        
@@ -97,6 +117,11 @@ class UnetModel:
         print(train_img_list.shape)
         ###########################'''
         
+        # initial training log
+        num_train = 0
+        acc_sum_train = 0
+        dce_sum_train = 0
+        loss_sum_train = 0
         
         with tf.Session() as sess:
             sess.run(init)
@@ -107,34 +132,53 @@ class UnetModel:
 
                 # Fit training using batch data
                 feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
+                
+                # run session
                 dice, loss, acc, _, inter, sum_pred, sum_y = sess.run([diceco, cost, accuracy, optimizer, intersection, sum_pred_lbl, sum_y_lbl], feed_dict=feed_dict)
 
+                # accumulate training result
+                n_sample = image_batch.shape[0]
+                num_train += n_sample
+                acc_sum_train += acc * n_sample
+                dce_sum_train += dice * n_sample
+                loss_sum_train += loss * n_sample
                 
                 if batch_idx % self.display_step == 0:
-                    print("Batch_idx: %d, Minibatch Loss: %0.6f , Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
-                        % (batch_idx, loss, acc, dice))
-                    print("intersection: {}, sum_pred: {}, sum_y: {}".format(inter, sum_pred, sum_y))
-                    # Save the variables to disk.
-                    # saver.save(sess, model_path)
+                    train_acc = acc_sum_train / num_train
+                    train_dce = dce_sum_train / num_train
+                    train_loss = loss_sum_train / num_train
+                    
+                    self.log("Batch_idx: %d, Minibatch Loss: %0.6f, Training Accuracy: %0.5f, Dice Coeffecient: %0.5f " 
+                        % (batch_idx, train_loss, train_acc, train_dce))
+                    
+                    num_train = 0
+                    acc_sum_train = 0
+                    dce_sum_train = 0
+                    loss_sum_train = 0
+
                 
                 if batch_idx % 500 == 499:
-                    #self.learning_rate *= 0.9
+                    self.learning_rate *= 0.9
                     
                     num_val = 0
-                    acc_sum = 0
-                    dce_sum = 0
+                    acc_sum_val = 0
+                    dce_sum_val = 0
                     for val_batch_idx, (image_batch, label_batch) in enumerate(self.data.val_batch()): 
                    
                         feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
                         dice, loss, acc = sess.run([diceco, cost, accuracy], feed_dict=feed_dict)
                         
-                        num_val += image_batch.shape[0]
-                        acc_sum += acc*image_batch.shape[0]
-                        dce_sum += dice*image_batch.shape[0]
+                        n_sample = image_batch.shape[0]
+                        num_val += n_sample
+                        acc_sum_val += acc * n_sample
+                        dce_sum_val += dice * n_sample
                         
-                    val_acc = acc_sum/num_val
-                    val_dce = dce_sum / num_val
-                    print("validation acc: {}".format(val_acc))
-                    print("validation dice: {}".format(val_dce))
+                    val_acc = acc_sum_val / num_val
+                    val_dce = dce_sum_val / num_val
+                    self.log("validation acc: {}".format(val_acc))
+                    self.log("validation dice: {}".format(val_dce))
+                    
+                    # Save the variables to disk.
+                    # saver.save(sess, model_path)
                 
                         

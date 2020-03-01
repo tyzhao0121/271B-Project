@@ -71,7 +71,13 @@ class Dataset:
         self.train_file = os.path.join(self.dataroot, 'train.txt')
         self.test_file = os.path.join(self.dataroot, 'test.txt')
         self.val_file = os.path.join(self.dataroot, 'val.txt')
-        self.split_dataset()
+        
+        if not os.path.exists(self.train_file):
+            self.split_dataset()
+        if not os.path.exists(self.val_file):
+            self.split_dataset()
+        if not os.path.exists(self.test_file):
+            self.split_dataset()
         
         
         self.train_img, self.train_lbl = self.load_data_to_list(self.train_file, self.dataroot)
