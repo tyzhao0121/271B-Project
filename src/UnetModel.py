@@ -78,15 +78,14 @@ class UnetModel:
     
     def train(self):
         self.initial_log_and_modeldir()
-
-       
         x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
         lr = tf.placeholder(tf.float32)
         weights = tf.placeholder(tf.float32, [self.batch_size * self.width * self.height])
         
-        #define model:
-        pred = self.network(x)
+        with tf.variable_scope('Stage1'):
+            #define model:
+            pred = self.network(x)
 
         # Define loss and optimizer
         pred_reshape = tf.reshape(pred, [self.batch_size * self.width * self.height, self.n_classes])
@@ -140,6 +139,7 @@ class UnetModel:
         
         with tf.Session() as sess:
             sess.run(init)
+            max_val_dce = 0.7
             for batch_idx, (image_batch, label_batch) in enumerate(self.data.train_batch()): 
                 # flatten to n dimsion
                 label_vect = np.reshape(np.argmax(label_batch, axis=-1), [self.batch_size * self.width * self.height])
@@ -149,7 +149,7 @@ class UnetModel:
                 feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
                 
                 # run session
-                dice, loss, acc, _, inter, sum_pred, sum_y = sess.run([diceco, cost, accuracy, optimizer, intersection, sum_pred_lbl, sum_y_lbl], feed_dict=feed_dict)
+                train_pred, dice, loss, acc, _, inter, sum_pred, sum_y = sess.run([pred, diceco, cost, accuracy, optimizer, intersection, sum_pred_lbl, sum_y_lbl], feed_dict=feed_dict)
 
                 # accumulate training result
                 n_sample = image_batch.shape[0]
@@ -172,7 +172,7 @@ class UnetModel:
                     loss_sum_train = 0
 
                 
-                if batch_idx % 500 == 499:
+                if batch_idx % 500 == 499 and train_dce > 0.5:
                     
                     
                     num_val = 0
@@ -181,7 +181,7 @@ class UnetModel:
                     for val_batch_idx, (image_batch, label_batch) in enumerate(self.data.val_batch()): 
                    
                         feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
-                        dice, loss, acc = sess.run([diceco, cost, accuracy], feed_dict=feed_dict)
+                        val_pred, dice, loss, acc = sess.run([pred, diceco, cost, accuracy], feed_dict=feed_dict)
                         
                         n_sample = image_batch.shape[0]
                         num_val += n_sample
@@ -194,10 +194,13 @@ class UnetModel:
                     self.log("validation dice: {}".format(val_dce))
                     
                     # Save the variables to disk.
-                    if val_dce > 0.7:
+                    if val_dce > max_val_dce:
+                        max_val_dce = val_dce
                         checkpoint_name = "{}_step_{}_dice_{:.4f}".format(self.model_name, batch_idx+1, val_dce)
                         checkpoint_path = os.path.join(self.modelDir, checkpoint_name)
                         saver.save(sess, checkpoint_path)
+                        np.save("{}_step_{}_dice_{:.4f}_train_pred".format(self.model_name, batch_idx+1, val_dce), train_pred)
+                        np.save("{}_step_{}_dice_{:.4f}_val_pred".format(self.model_name, batch_idx+1, val_dce), val_pred)
                         
                         self.log("saving checkpoint to {}".format(checkpoint_path))
                         

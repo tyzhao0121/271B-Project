@@ -86,7 +86,7 @@ class AutoUnet:
         self.log("Stage 1, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
         
         tf.reset_default_graph()
-        x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels+2])
+        x = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_channels])
         y = tf.placeholder(tf.float32, [None, self.width, self.height, self.n_classes])
         lr = tf.placeholder(tf.float32)
         weights = tf.placeholder(tf.float32, [self.batch_size * self.width * self.height])
@@ -162,7 +162,7 @@ class AutoUnet:
                 weight_vect = class_weights[label_vect]
 
                 # Fit training using batch data
-                feed_dict = {x: concated_image, y: label_batch, weights: weight_vect, lr:self.learning_rate}
+                feed_dict = {x: image_batch, y: label_batch, weights: weight_vect, lr:self.learning_rate}
 
                 # run session
                 train_pred_mask, dice, loss, acc, _, inter, sum_pred, sum_y = sess.run([pred, diceco, cost, accuracy, optimizer, intersection, sum_pred_lbl, sum_y_lbl], feed_dict=feed_dict)
@@ -190,7 +190,7 @@ class AutoUnet:
                 if batch_idx % 5000 == 4999:
                     self.learning_rate *= 0.9
                     
-                if batch_idx % 500 == 499:
+                if batch_idx % 500 == 499 and train_dce > 0.5:
                     
                     num_val = 0
                     acc_sum_val = 0
@@ -226,9 +226,14 @@ class AutoUnet:
                         
                         max_val_dce = val_dce
                         
-                    if val_dce > 0.75:
+                    if val_dce > 0.85:
                         return
 
+    def load_stage1(self, name):
+        self.stage1modelname = name
+        self.train_stage2_mask = np.load(name+'_train_pred.npy')
+        self.val_stage2_mask = np.load(name+'_val_pred.npy')
+    
     def train_stage2(self):
         self.learning_rate = 0.001
         print(self.initial_log())
@@ -340,7 +345,7 @@ class AutoUnet:
                 if batch_idx % 5000 == 4999:
                     self.learning_rate *= 0.9
 
-                if batch_idx % 500 == 499:
+                if batch_idx % 500 == 499 and train_dce > 0.5:
                     
 
                     num_val = 0
@@ -377,7 +382,7 @@ class AutoUnet:
                         
                         max_val_dce = val_dce
                         
-                    if val_dce > 0.75:
+                    if val_dce > 0.85:
                         return
 
                     
@@ -491,7 +496,7 @@ class AutoUnet:
                 if batch_idx % 5000 == 4999:
                     self.learning_rate *= 0.9
 
-                if batch_idx % 500 == 499:
+                if batch_idx % 500 == 499 and train_dce > 0.5:
    
 
                     num_val = 0
@@ -530,10 +535,10 @@ class AutoUnet:
                         
                         max_val_dce = val_dce
                         
-                    if val_dce > 0.75:
+                    if val_dce > 0.85:
                         return
                     
-    def train_end_to_end(self, file1, file2, file3):
+    def train_end_to_end(self, file2, file3):
         print(self.initial_log())
         self.log(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         self.log("Stage ALL, Max Epoch: {}, Batch Size: {}, Learning Rate: {}, Loss: {}".format(self.max_epoch, self.batch_size, self.learning_rate, self.loss_method))
@@ -545,9 +550,9 @@ class AutoUnet:
 
         with tf.variable_scope('Stage1'):
             #define model:
-            x1 = tf.concat([x, tf.ones((self.batch_size, self.width, self.height, 2))/2], -1)
-            print(x1)
-            pred1 = self.network(x1)
+            # x1 = tf.concat([x, tf.ones((self.batch_size, self.width, self.height, 2))/2], -1)
+            print(x)
+            pred1 = self.network(x)
         
         with tf.variable_scope('Stage2'):
             #define model:
@@ -626,7 +631,7 @@ class AutoUnet:
         with tf.Session() as sess:
             self.learning_rate = 1e-5
             sess.run(init)
-            saver1.restore(sess, file1)
+            saver1.restore(sess, self.stage1modelname)
             saver2.restore(sess, file2)
             saver3.restore(sess, file3)
             
